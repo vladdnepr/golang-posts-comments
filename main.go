@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"tutorials/database"
 )
 
-import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 
 type Post struct {
@@ -79,44 +79,23 @@ func getCommentsByPostId(id int) ([]Comment, error) {
 	return comments, nil
 }
 
-func savePostToDb(post Post, db *sql.DB) error {
-	_, err := db.Exec(
-		"INSERT INTO posts (id, user_id, title, body) VALUES (?, ?, ?, ?)",
-		post.Id,
-		post.UserId,
-		post.Title,
-		post.Body,
-	)
-
-	return err
-}
-
-func saveCommentToDb(comment Comment, db *sql.DB) error {
-	_, err := db.Exec(
-		"INSERT INTO comments (id, post_id, name, email, body) VALUES (?, ?, ?, ?, ?)",
-		comment.Id,
-		comment.PostId,
-		comment.Name,
-		comment.Email,
-		comment.Body,
-	)
-
-	return err
-}
-
 func main() {
-	db, err := sql.Open("mysql", "root:root@/golang")
+
+	db, err := database.New()
 
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	defer db.Close()
+	err = db.AutoMigrate()
 
-	// Clear DB
-	_, _ = db.Exec("TRUNCATE posts")
-	_, _ = db.Exec("TRUNCATE comments")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	db.Truncate()
 
 	var wg sync.WaitGroup
 
@@ -134,12 +113,7 @@ func main() {
 			for _, post := range posts {
 				fmt.Println("Post ", post.Id)
 
-				err = savePostToDb(post, db)
-
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+				db.Db.Create(&post)
 
 				// Go parallel fetching comments by post
 				go func(postId int) {
@@ -151,12 +125,7 @@ func main() {
 					}
 
 					for _, comment := range comments {
-						err = saveCommentToDb(comment, db)
-
-						if err != nil {
-							fmt.Println(err)
-							return
-						}
+						db.Db.Create(&comment)
 					}
 
 					wg.Done()
